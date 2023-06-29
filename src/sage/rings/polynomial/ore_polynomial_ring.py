@@ -369,6 +369,9 @@ class OrePolynomialRing(UniqueRepresentation, Algebra):
                     pass
             constructors.append(skew_polynomial_ring.SkewPolynomialRing)
         elif morphism is None:
+            from sage.rings.function_field.function_field import FunctionField
+            if isinstance(base_ring, FunctionField):
+                constructors.append(differential_polynomial_ring.DifferentialPolynomialRing_function_field)
             constructors.append(differential_polynomial_ring.DifferentialPolynomialRing)
 
         for constructor in constructors:

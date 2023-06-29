@@ -135,3 +135,5 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
             B = A*B + B.apply_morphism(d)
         return B
 
+class DifferentialPolynomial_function_field(DifferentialPolynomial_generic_dense):
+    pass
