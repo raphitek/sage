@@ -101,7 +101,7 @@ class DifferentialPolynomialRing_function_field(DifferentialPolynomialRing):
 
             sage: R.<t> = FunctionField(GF(5))
             sage: d = R.derivation()
-            sage: S.<D> = OrePolynomialRing(R,derivation)
+            sage: S.<D> = OrePolynomialRing(R,d)
 
         We test that S has the good type::
 
