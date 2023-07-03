@@ -47,8 +47,7 @@ def _fundamental_solutions(A, der):
     t = A.parent().base_ring().gen()
     Ir = A.parent()(1)
     Y, Z = Ir + t*A.apply_map(truncate(1)), Ir
-    for i in range(20):
-    #while m <= p:
+    while m <= p:
         Z = Z + (Z * (Ir - Y*Z)).apply_map(truncate(m))
         S = Z * (Y.apply_morphism(der) - A.apply_map(truncate(2*m -1)) * Y)
         Y = Y - (Y * S.apply_map(integ)).apply_map(truncate(2*m))
