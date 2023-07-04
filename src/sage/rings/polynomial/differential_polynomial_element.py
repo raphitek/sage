@@ -56,7 +56,7 @@ def _fundamental_solutions(A, der):
 
 def _p_curvature_mod_xp(L):
     der=L.parent().twisting_derivation()
-    A = L.companion_matrix()
+    A = -L.companion_matrix()
     XS = _fundamental_solutions(A, der)
     sec = lambda f: f.list()[-1]
     return (XS * (A*XS).apply_map(sec) * XS.inverse())
@@ -171,9 +171,9 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
         if d.pth_power() != 0:
             raise NotImplementedError("computation of the p-curvature is only implemented when d^p = 0")
         A = self.companion_matrix()
-        B = -A
+        B = A
         for _ in range(p-1):
-            B = B.apply_morphism(d) - A*B
+            B = B.apply_morphism(d) + A*B
         return B
 
 class DifferentialPolynomial_function_field(DifferentialPolynomial_generic_dense):
