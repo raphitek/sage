@@ -26,8 +26,23 @@ AUTHOR:
 #                  http://www.gnu.org/licenses/
 #****************************************************************************
 
+from sage.categories.fields import Fields
+from sage.rings.polynomial.polynomial_ring import PolynomialRing_general
 from sage.rings.polynomial.ore_polynomial_ring import OrePolynomialRing
-from sage.rings.function_field.function_field import FunctionField
+from sage.rings.function_field.function_field_rational import RationalFunctionField
+from sage.rings.fraction_field import FractionField_generic
+
+
+def base_polynomial_ring_over_field(R):
+    if isinstance(R, PolynomialRing_general) and R.base_ring() in Fields():
+        return R.base_ring()
+
+def base_rational_function_field(R):
+    if isinstance(R, RationalFunctionField):
+        return R.base_ring()
+    if isinstance(R, FractionField_generic):
+        S = R.ring()
+        return is_polynomial_ring_over_field(S)
 
 class DifferentialPolynomialRing(OrePolynomialRing):
     r"""
@@ -79,7 +94,7 @@ class DifferentialPolynomialRing(OrePolynomialRing):
             self.Element = sage.rings.polynomial.differential_polynomial_element.DifferentialPolynomial_generic_dense
         OrePolynomialRing.__init__(self, base_ring, None, derivation, name, sparse, category)
 
-class DifferentialPolynomialRing_function_field(DifferentialPolynomialRing):
+class DifferentialPolynomialRing_rational_field(DifferentialPolynomialRing):
     def __init__(self, base_ring, morphism, derivation, name, sparse, category=None):
         r"""
         Initialize ``self``.
@@ -108,9 +123,17 @@ class DifferentialPolynomialRing_function_field(DifferentialPolynomialRing):
             sage: type(S)
             <class 'sage.rings.polynomial.differential_polynomial_ring.DifferentialPolynomialRing_function_field_with_category'>
         """
-        if morphism is not None or not isinstance(base_ring, FunctionField):
+        if morphism is not None:
             raise NotImplementedError
+        self._constant_base_field = base_rational_function_field(base_ring)
+        if self._constant_base_field is None:
+            self._constant_base_field =  base_polynomial_ring_over_field(base_ring)
+            if self._constant_base_field is None:
+                raise NotImplementedError
         if self.Element is None:
             import sage.rings.polynomial.differential_polynomial_element
-            self.Element = sage.rings.polynomial.differential_polynomial_element.DifferentialPolynomial_function_field
+            self.Element = sage.rings.polynomial.differential_polynomial_element.DifferentialPolynomial_rationnal_field
         OrePolynomialRing.__init__(self, base_ring, None, derivation, name, sparse, category)
+
+    def constant_base_field(self):
+        return self._constant_base_field

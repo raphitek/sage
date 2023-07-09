@@ -18,8 +18,15 @@ AUTHORS:
 #                  http://www.gnu.org/licenses/
 #****************************************************************************
 
+from sage.rings.polynomial.polynomial_ring_constructor import PolynomialRing
 from sage.rings.polynomial.ore_polynomial_element import OrePolynomial_generic_dense
+from sage.rings.finite_rings.finite_field_constructor import FiniteField
+from sage.rings.quotient_ring import QuotientRing
 from sage.matrix.constructor import matrix
+from sage.matrix.special import companion_matrix
+
+from sage.arith.functions import lcm
+from sage.arith.misc import xgcd
 
 def _from_falling_factorial(P, a, gen):
     if not P:
@@ -38,10 +45,81 @@ def _integrator(f, g):
     l.pop(-1)
     return f.parent([0] + [ l[i]/(i+1) for i in range(len(l))]) 
 
+def _incr(l, d, parent):
+    for i in range(len(l)):
+        l[i] += 1
+        if l[i] != 0:
+            break
+    else:
+        l.append(parent.zero())
+        d += 1
+    return d
 
-def _fundamental_solutions(A, der):
-    m, p=2, der.domain().characteristic()
-    g = der(A.parent().base_ring().gen()).inverse()
+def _eval(P, base):
+    """Return the evaluation of a polynomial whose lift of coeffcients is L in base based on a
+    divide and conquer algorithm.
+    INPUT: L a list of elements of a ring R, base an element of an R-algebra
+    OUTPUT : P(base) where P is a polynomial whose list of coefficients is L
+    """
+    if P.degree()*len(base.list())<=1000:
+        return P(base), base**(P.degree()+1)
+    L = P.list()
+    n = len(L)
+    P1, Q1 = _eval(P.parent()(L[:n//2]), base)
+    P2, Q2 = _eval(P.parent()(L[n//2:]), base)
+    return P2*Q1 + P1, Q2*Q1
+
+def _local_phi(L, l, p):
+    pol = PolynomialRing(l, 's')
+    shift = []
+    for f in L.list():
+        shift.append(_eval(f.numerator(), pol.gen()+l.gen())[0])
+    modulo = QuotientRing(pol, pol.gen()**p)
+    print(shift[-1].parent())
+    lc = modulo(shift[-1])
+    lc = lc**(-1)
+    return [modulo(f)*lc for f in shift], modulo
+
+def _local_zeta(l, p, modulus):
+    if l.degree() == 1:
+        return 0
+    nu = l.gen()**p
+    L = []
+    a = l.one()
+    for _ in range(l.degree()):
+        L.append(a.list())
+        a = a*nu
+    zeta = l(matrix(L).solve_left(matrix(l.gen().list())).list())
+    return zeta
+
+def _local_phi_inverse(f, l, parent, zeta):
+    P = _eval(f, parent.gen() - l.gen())[0]
+    if not zeta:
+        return parent(P)
+    L = 0
+    frob_inv = l.frobenius_endomorphism().inverse()
+    for i in range(len(P.list())):
+        g = parent(frob_inv(P.list()[i]).list())
+        L += (parent(_eval(g, zeta)[0])**l.characteristic()).shift(i)
+    return L
+
+def _gluing(L, p):
+    n=len(L)
+    if n == 1:
+        return L
+    if n == 2:
+        m, n = L[0][1], L[1][1]
+        d, u, v = xgcd(m, n)
+        if d != 1:
+            raise ValueError('set of moduli are not pairwise coprime')
+        g = (m*n)**p
+        rem = lambda f: f.quo_rem(g)[1]
+        return [(((u*m)**p*L[0][0]+(v*n)**p*L[1][0]).apply_map(rem), m*n)]
+    return _gluing(_gluing(L[:n//2],p) + _gluing(L[n//2:], p), p)
+
+def _fundamental_solutions(A, g):
+    m, p = 2, A.parent().characteristic()
+    der = g * A.parent().base_ring().derivation()
     integ = lambda f : _integrator(f, g)
     truncate = lambda n : lambda f : f.parent()(f.list()[:n])
     t = A.parent().base_ring().gen()
@@ -54,13 +132,11 @@ def _fundamental_solutions(A, der):
         m = 2*m
     return Y
 
-def _p_curvature_mod_xp(L):
-    der=L.parent().twisting_derivation()
-    A = -L.companion_matrix()
+def _p_curvature_mod_xp(L, der):
+    A = -companion_matrix(L)
     XS = _fundamental_solutions(A, der)
     sec = lambda f: f.list()[-1]
     return (XS * (A*XS).apply_map(sec) * XS.inverse())
-
 
 
 class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
@@ -89,26 +165,26 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
 
         EXAMPLES::
 
-            sage: A.<t> = GF(5)[]
+            sage: A.<t> = FiniteField(5)[]
             sage: S.<d> = A['d', A.derivation()]
             sage: d.p_curvature()
             [0]
-            sage: (d^2).p_curvature()
+            sage: (d**2).p_curvature()
             [0 0]
             [0 0]
 
-            sage: L = d^3 + t*d
+            sage: L = d**3 + t*d
             sage: M = L.p_curvature()
             sage: M
             [      0       0       0]
-            [  4*t^2     4*t t^3 + 1]
-            [      3   4*t^2       t]
+            [  4*t**2     4*t t**3 + 1]
+            [      3   4*t**2       t]
 
         We verify that the coefficients of characteristic polynomial of
-        the `p`-curvature are polynomials in `t^p`::
+        the `p`-curvature are polynomials in `t**p`::
 
             sage: M.charpoly()
-            x^3 + t^5*x
+            x**3 + t**5*x
 
         When the base ring has characteristic zero, the `p`-curvature is
         not defined and an error is raised::
@@ -122,7 +198,7 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
 
         TESTS::
 
-            sage: A.<t> = GF(5)[]
+            sage: A.<t> = FiniteField(5)[]
             sage: S.<d> = A['d', A.derivation()]
             sage: d.p_curvature(algorithm="fast")
             Traceback (most recent call last):
@@ -148,13 +224,13 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
 
         TESTS::
 
-            sage: A.<t> = GF(5)[]
+            sage: A.<t> = FiniteField(5)[]
             sage: K = A.fraction_field()
             sage: S.<d> = K['d', K.derivation()]
-            sage: L = d^2 + t^2*d - 1/t
+            sage: L = d**2 + t**2*d - 1/t
             sage: L.p_curvature(algorithm='katz')  # indirect doctest
-            [                             (t^9 + 4*t^6 + 2*t^4 + 2*t^3 + t + 4)/t^4 (4*t^12 + 3*t^9 + 2*t^7 + 2*t^6 + 2*t^4 + 2*t^3 + 4*t^2 + 2*t + 1)/t^5]
-            [                        (4*t^11 + 3*t^8 + 2*t^6 + 2*t^3 + 4*t + 4)/t^3                     (t^14 + 4*t^9 + t^6 + 3*t^4 + 3*t^3 + 4*t + 1)/t^4]
+            [                             (t**9 + 4*t**6 + 2*t**4 + 2*t**3 + t + 4)/t**4 (4*t**12 + 3*t**9 + 2*t**7 + 2*t**6 + 2*t**4 + 2*t**3 + 4*t**2 + 2*t + 1)/t**5]
+            [                        (4*t**11 + 3*t**8 + 2*t**6 + 2*t**3 + 4*t + 4)/t**3                     (t**14 + 4*t**9 + t**6 + 3*t**4 + 3*t**3 + 4*t + 1)/t**4]
 
         ::
 
@@ -162,19 +238,51 @@ class DifferentialPolynomial_generic_dense(OrePolynomial_generic_dense):
             sage: x.p_curvature(algorithm='katz')  # indirect doctest
             Traceback (most recent call last):
             ...
-            NotImplementedError: computation of the p-curvature is only implemented when d^p = 0
+            NotImplementedError: computation of the p-curvature is only implemented when d**p = 0
 
         """
         KD = self.parent()
         d = KD.twisting_derivation()
         p = KD.characteristic()
         if d.pth_power() != 0:
-            raise NotImplementedError("computation of the p-curvature is only implemented when d^p = 0")
+            raise NotImplementedError("computation of the p-curvature is only implemented when d**p = 0")
         A = self.companion_matrix()
         B = A
         for _ in range(p-1):
             B = B.apply_morphism(d) + A*B
         return B
 
-class DifferentialPolynomial_function_field(DifferentialPolynomial_generic_dense):
-    pass
+class DifferentialPolynomial_rationnal_field(DifferentialPolynomial_generic_dense):
+    
+    def _p_curvature_bocasc(self):
+        base, der = self.parent()._constant_base_field, self.parent().twisting_derivation()
+        gen_derivative = der(der.domain().gen())
+        p = base.characteristic()
+        P = self.right_monic()
+        denom = lcm(f.denominator() for f in P.list())
+        P = denom*P
+        denom = P.leading_coefficient().numerator()
+        pol = denom.parent()
+        d = max(f.numerator().degree() for f in P.list())
+        elements = []
+        global_degree = 0
+        l=[base(0)]
+        local_degree = 1
+        test = [gen_derivative.numerator(), gen_derivative.denominator(), denom]
+        while global_degree <= d:
+            poly = pol(l+[1])
+            if poly.is_irreducible() and 0 not in [f.quo_rem(poly)[1] for f in test]:
+                elements.append(poly)
+                global_degree += local_degree
+            local_degree = _incr(l, local_degree, base)
+        local_p_curv = []
+        for a in elements:
+            local_field = FiniteField(p**(a.degree()), name='s', modulus = a)
+            local_P, local_mod = _local_phi(P, local_field, p)
+            local_A = local_P[-1]**p*_p_curvature_mod_xp(local_P,\
+                    _eval(test[0], local_mod.gen() + local_field.gen())[0]\
+                    /_eval(test[1], local_mod.gen() + local_field.gen())[0])
+            local_zeta = _local_zeta(local_field, p, a)
+            phi_inverse = lambda f: _local_phi_inverse(f.lift(), local_field, denom.parent(), local_zeta)
+            local_p_curv.append((local_A.apply_map(phi_inverse), a))
+        return (1/(denom**p))*_gluing(local_p_curv, p)[0][0].change_ring(self.parent().base_ring())
