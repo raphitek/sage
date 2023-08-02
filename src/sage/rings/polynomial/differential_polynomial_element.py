@@ -70,15 +70,26 @@ def _eval(P, base):
     return P2*Q1 + P1, Q2*Q1
 
 def _local_phi(L, l, p):
+    """Computes the list of f(t+a) mod t^p where f are polynomial coefficient of an
+    operator L and a is a generator of the field l.
+    
+    INPUT:  - L a differential operator over some rational function field of
+             characteristic p whose denominator is 1.
+            - l a finite field extension of L's constant base field.
+            - p, l's characteristic
+    
+    OUTPUT: - The list of f/lc(t+a) mod t^p where lc is the leading
+              coefficient of L
+            - 1/lc(t+a) mod t^p
+    """
     pol = PolynomialRing(l, 's')
     shift = []
     for f in L.list():
         shift.append(_eval(f.numerator(), pol.gen()+l.gen())[0])
     modulo = QuotientRing(pol, pol.gen()**p)
-    print(shift[-1].parent())
     lc = modulo(shift[-1])
-    lc = lc**(-1)
-    return [modulo(f)*lc for f in shift], modulo
+    lc_inv = lc**(-1)
+    return [modulo(f)*lc_inv for f in shift], modulo, lc
 
 def _local_zeta(l, p, modulus):
     if l.degree() == 1:
@@ -278,10 +289,11 @@ class DifferentialPolynomial_rationnal_field(DifferentialPolynomial_generic_dens
         local_p_curv = []
         for a in elements:
             local_field = FiniteField(p**(a.degree()), name='s', modulus = a)
-            local_P, local_mod = _local_phi(P, local_field, p)
-            local_A = local_P[-1]**p*_p_curvature_mod_xp(local_P,\
+            local_P, local_mod, local_lc = _local_phi(P, local_field, p)
+            local_A = local_lc**p*_p_curvature_mod_xp(local_P,\
                     _eval(test[0], local_mod.gen() + local_field.gen())[0]\
                     /_eval(test[1], local_mod.gen() + local_field.gen())[0])
+            reduction = lambda f: f.numerator()(f.parent().gen().numerator()+local_field.gen()).quo_rem(f.parent().gen().numerator()**p)[1]
             local_zeta = _local_zeta(local_field, p, a)
             phi_inverse = lambda f: _local_phi_inverse(f.lift(), local_field, denom.parent(), local_zeta)
             local_p_curv.append((local_A.apply_map(phi_inverse), a))
